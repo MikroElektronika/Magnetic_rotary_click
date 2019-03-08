@@ -1,0 +1,137 @@
+{
+Example for Magnetic_rotary Click
+
+    Date          : Nov 2018.
+    Author        : Nemanja Medakovic
+
+Test configuration STM32 :
+    
+    MCU              : STM32F107VCT6
+    Dev. Board       : EasyMx PRO v7 for STM32
+    ARM Compiler ver : v6.0.0.0
+
+---
+
+Description :
+
+The application is composed of three sections :
+
+- System Initialization - Initializes peripherals and pins.
+- Application Initialization - Initializes SPI interface for communication with the device.
+- Application Task - (code snippet) - Reads a magnetic field angle calculated to degrees for channel A
+  in Single-Ended Mode and logs results on uart terminal.
+  Repeats operation every 300 milliseconds.
+Note : The angle can be measured in the range from -90 to 90 degrees.
+
+Additional Functions :
+
+- void floatCut() - Makes the float values to be rounded on two decimal places.
+- void plotAngle() - Sends results of angle on serial plotter.
+
+}
+program Click_Magnetic_rotary_STM;
+
+uses Click_Magnetic_rotary_types, Click_Magnetic_rotary_config;
+
+var
+    magnAngle : double; 
+    text : array[50] of char; 
+    logDeg : array[2] of char; 
+    plotTime : uint32_t; 
+    
+procedure floatCut(); 
+var
+    count : uint8_t; 
+    conCnt : uint8_t; 
+    conVar : uint8_t; 
+begin
+    conCnt := 0;
+    conVar := 0;
+
+    for count := 0 to 50 - 1 do 
+    begin
+        if (text[count] = '.') then 
+        begin
+            conVar := 1; 
+        end; 
+        if (conVar = 1) then 
+        begin
+            inc(conCnt);
+        end; 
+        if (conCnt > 3) then 
+        begin
+            if ((text[count] = 'e') or (conVar = 2)) then 
+            begin
+                text[count - (conCnt - 4)] := text[count]; 
+                text[count] := 0; 
+                conVar := 2; 
+            end
+            else 
+            begin
+                text[count] := 0; 
+            end;
+        end; 
+    end;
+end;
+
+procedure plotAngle(); 
+var
+    plotData : int16_t; 
+begin
+    plotData := magnAngle;
+
+    IntToStr(plotData, text); 
+    mikrobus_logWrite(text, _LOG_TEXT); 
+    mikrobus_logWrite(',', _LOG_TEXT); 
+    LongWordToStr(plotTime, text); 
+    mikrobus_logWrite(text, _LOG_LINE); 
+    if (plotTime = 0xFFFFFFFF) then 
+    begin
+        plotTime := 0; 
+    end
+    else 
+    begin
+        inc(plotTime);
+    end;
+end;
+
+procedure systemInit(); 
+begin
+    mikrobus_gpioInit(_MIKROBUS1, _MIKROBUS_CS_PIN, _GPIO_OUTPUT); 
+    mikrobus_spiInit(_MIKROBUS1, @_MAGNROTARY_SPI_CFG[0]); 
+    mikrobus_logInit(_LOG_USBUART_A, 9600); 
+    mikrobus_logWrite('*** Initializing... ***', _LOG_LINE); 
+    Delay_ms(100); 
+end;
+
+procedure applicationInit(); 
+begin
+    magnrotary_spiDriverInit(T_MAGNROTARY_P(@_MIKROBUS1_GPIO), T_MAGNROTARY_P(@_MIKROBUS1_SPI)); 
+    Delay_ms(500); 
+    logDeg[0] := 176; 
+    logDeg[1] := 0; 
+    plotTime := 0; 
+    mikrobus_logWrite('** Magnetic rotary is initialized **', _LOG_LINE); 
+    mikrobus_logWrite('', _LOG_LINE); 
+end;
+
+procedure applicationTask(); 
+begin
+    magnAngle := magnrotary_getFieldAngle(_MAGNROTARY_CHA_POS_GND_NEG or _MAGNROTARY_MSB_ZEROS_ORDER); 
+    FloatToStr(magnAngle, text); 
+    floatCut(); 
+    mikrobus_logWrite('Angle is : ', _LOG_TEXT); 
+    mikrobus_logWrite(text, _LOG_TEXT); 
+    mikrobus_logWrite(logDeg, _LOG_LINE); 
+    Delay_ms(300); 
+end;
+
+begin
+
+    systemInit(); 
+    applicationInit(); 
+    while (1) do 
+    begin 
+        applicationTask(); 
+    end;
+end.
